@@ -1,0 +1,214 @@
+#!/usr/bin/python
+
+from __future__ import print_function
+import os, sys, getopt, requests, pprint, json, time
+
+debug = 0
+
+def usage(code):
+   print('Usage: python-virl -u user -p password -s server -n name -f file <cmd>\n', file=sys.stderr)
+   sys.exit(code)
+
+
+def main(argv):
+   global debug
+
+   # Load environment variables
+   user     = os.getenv('PYVIRL_USER',     'guest')
+   password = os.getenv('PYVIRL_PASSWORD', 'guest')
+   server   = os.getenv('PYVIRL_SERVER',   'localhost:19399')
+   file     = os.getenv('PYVIRL_FILE',     '')
+   name     = os.getenv('PYVIRL_NAME',     '')
+
+   # Load commandline arguments
+   try:
+      opts, args = getopt.getopt(argv,"df:hn:p:s:u:",["debug","file=","name=","password=","server=","user="])
+   except getopt.GetoptError:
+      usage(2)
+   for opt, arg in opts:
+      if opt in ('-h', '--help'):
+         usage(0)
+      elif opt in ("-d", "--debug"):
+         debug += 1
+      elif opt in ("-u", "--user"):
+         user = arg
+      elif opt in ("-p", "--password"):
+         password = arg
+      elif opt in ("-n", "--name"):
+         name = arg
+      elif opt in ("-s", "--server"):
+         server = arg
+      elif opt in ("-f", "--file"):
+         file   = arg
+
+   # Fill in some defaults
+   if name == '' and file != '':
+      name = file
+   
+   # Get command to perform
+   try:
+      command = args.pop(0)
+   except IndexError:
+      usage(2)
+   if command == 'list':
+      alist = list(user, password, server)
+      pprint.pprint(alist)
+   elif command == 'serial-port':
+      mode = 'telnet'
+      port = '0'
+      text = False
+      try:
+         simulation_id = args.pop(0)
+      except IndexError:
+         usage(2)
+      try:
+         mopts, margs = getopt.getopt(args,"m:p:t",["mode=","port=","text"])
+      except getopt.GetoptError:
+         usage(2)
+      for mopt, marg in mopts:
+         if mopt in ('-m','--mode'):
+            mode = arg
+         if mopt in ('-p','--port'):
+            port = arg
+         if mopt in ('-t','--text'):
+            text = True
+      serials = serial_port(user, password, server, simulation_id, mode, port, text)
+      if not text:
+         pprint.pprint(serials)
+      else:
+         if len(serials):
+            print(serials)
+   elif command == 'status':
+      try:
+         simulation_id = args.pop(0)
+      except IndexError:
+         usage(2)
+      astatus = status(user, password, server, simulation_id)
+   elif command == 'start':
+      simulation_id = start(user, password, server, name, file)
+      print(simulation_id)
+   elif command == 'start-wait':
+      simulation_id = start(user, password, server, name, file)
+      print(simulation_id)
+      wait_sim_active(user, password, server, simulation_id)
+   elif command == 'stop':
+      try:
+         simulation_id = args.pop(0)
+      except IndexError:
+         usage(2)
+      stop(user, password, server, simulation_id)
+   elif command == 'stopall':
+      simulations = list(user, password, server)
+      i = 0
+      for sim in simulations:
+         if stop(user, password, server, sim):
+            i += 1
+      if i:
+         exit(1)
+   else:
+      usage(2)
+
+   # EOT
+   if debug > 1:
+      print('Exiting', file=sys.stderr)
+      
+   exit(0)
+
+def list(user, password, server):
+   url = "http://%s/simengine/rest/list" % server
+   try:
+      result = requests.get(url, auth=(user, password))
+   except requests.exceptions.ConnectionError as e:
+      print('Url (%s): Error: %s' % (url, e.strerror()), file=sys.stderr)
+   if debug > 1:
+      pprint.pprint(result.json(), stream=sys.stderr)
+   simulations = json.loads(result.text)
+   return simulations['simulations']
+
+def serial_port(user, password, server, simulation_id, mode, port, text):
+   textver = ''
+   url = "http://%s/simengine/rest/serial_port/%s?mode=%s&port=%s" % (server, simulation_id, mode, port)
+   result = requests.get(url, auth=(user, password))
+   if debug > 1:
+      pprint.pprint(result.json(), stream=sys.stderr)
+   serials = json.loads(result.text)
+   if text:
+      for node in serials:
+         if serials[node] is not None:
+            host, port = serials[node].split(":")
+            if len(textver):
+               textver += "\n%s %s %s" % (node, host, port)  
+            else:
+               textver += "%s %s %s" % (node, host, port)  
+      return str(textver)
+   return serials
+
+
+def start(user, password, server, name, file):
+   if file == '':
+      usage(2)
+
+   with open(file) as fh:
+      data = fh.read()
+   url = "http://%s/simengine/rest/launch?file=%s" % (server, name)
+   #print('url is %s', url)
+   try:
+      result = requests.post(url, auth=(user, password), data=data)
+   except requests.exceptions.ConnectionError as e:
+      print('Url (%s): Error: %s' % (url, e.strerror()), file=sys.stderr)
+      sys.exit(1)
+
+   simulation_id = result.text
+   return simulation_id
+
+def stop(user, password, server, simulation_id):
+   url = "http://%s/simengine/rest/stop/%s" % (server, simulation_id)
+   try:
+      requests.get(url, auth=(user, password))
+   except requests.exceptions.ConnectionError as e:
+      print('Url (%s): Error: %s' % (url, e.strerror()), file=sys.stderr)
+      sys.exit(1)
+   return 0
+
+def status(user, password, server, simulation_id):
+   url = "http://%s/simengine/rest/status/%s" % (server, simulation_id)
+   result = requests.get(url, auth=(user, password))
+   if debug > 1:
+      pprint.pprint(result.json(), stream=sys.stderr)
+   status = json.loads(result.text)
+   return status
+
+def wait_sim_active(user, password, server, simulation_id):
+   astatus = status(user, password, server, simulation_id)
+   if astatus['state'] != 'ACTIVE':
+      if debug > 1:
+         print('State for sim_id %s is not yet active (%s)' % (simulation_id, astatus['state']), file=sys.stderr)
+      time.sleep(1)
+      return wait_sim_active(user, password, server, simulation_id)
+   return wait_port_active(user, password, server, simulation_id)
+
+def wait_port_active(user, password, server, simulation_id, mode='telnet', port=0):
+   inactive = False
+   serials = serial_port(user, password, server, simulation_id, mode, port, False)
+   for node in serials:
+      if serials[node] is None:
+         inactive = True
+         if debug > 1:
+            print('Serial port for %s not yet active' % node, file=sys.stderr)
+   if inactive:
+      time.sleep(1)
+      return wait_port_active(user, password, server, simulation_id, mode, port)
+   return True
+
+def topology(user, password, server, simulation_id):
+   url = "http://%s/simengine/rest/export/%s?updated=1" % (server, simulation_id)
+   result = requests.get(url, auth=(user, password))
+   topology = result.text
+   if debug > 1:
+   	pprint.pprint(topology, stream=sys.stderr)
+   return topology
+
+
+if __name__ == "__main__":
+   main(sys.argv[1:])
+

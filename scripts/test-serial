@@ -1,0 +1,78 @@
+#!/usr/bin/python
+#
+# vim: set ts=4 sw=4 sts=0 et :
+
+from __future__ import print_function
+
+import pexpect, os, sys, getopt, time
+
+def usage(code):
+    print('Usage: test-serial [-i prompt] -s server [-p port] [-i prompt]\n', file=sys.stderr)
+    sys.exit(code)
+
+def main(argv):
+    # Options
+    server = 'localhost'
+    port = 23
+    timeout = 30
+    input = '>'
+    attempts = 30
+    debug = 2
+
+    # Local vars
+    tries = 0
+
+    # Cmdline parsing
+    try:
+        opts, args = getopt.getopt(argv,"di:p:s:t:",["debug","input=","port=","server=","timeout="])
+    except getopt.GetoptError:
+        usage(2)
+    for opt, arg in opts:
+        if opt in ('-d','--debug'):
+            debug += 1
+        if opt in ('-i','--input'):
+            input = arg
+        if opt in ('-p','--port'):
+            port = arg
+        if opt in ('-s','--server'):
+            server = arg
+        if opt in ('-t','--timeout'):
+            timeout = arg
+    if server == '':
+        usage(2)
+
+    # The meat
+    child = pexpect.spawn('telnet %s %s' % (server,port))
+    if debug > 0:
+        child.logfile = sys.stdout
+    child.expect("Escape character is .*", timeout=timeout)
+    child.expect("%SYS-5-RESTART", timeout=200)
+
+    while True:
+        try:
+            child.send(chr(10))
+            if debug > 0:
+                print('Looking for input "%s" in stream.' % input, file=sys.stderr)
+            i = child.expect([input, '%SYS-5-RESTART'], timeout=timeout)
+            if i == 0:
+                # Found!
+                exit(0)
+            else:
+                tries += 1
+                if debug > 0:
+                    print('Try %d: Found alternative input, retrying' % tries, file=sys.stderr)
+
+        except Exception as e:
+            tries += 1
+            #child.interact()
+            if tries > attempts:
+                print('Exiting after %d attempts with failure "%s"\n' % (tries, str(e)), file=sys.stderr)
+                exit(1)
+            if debug > 0:
+                print('Try %d: Exception %s, retrying' % (tries, str(e)), file=sys.stderr)
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+
