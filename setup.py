@@ -8,7 +8,7 @@ setup(name='python-virl',
       description='Control Cisco VIRL through a python script',
       author='Maarten Thibaut',
       author_email='mthibaut@cisco.com',
-      scripts=['scripts/python-virl',['scripts/pyvirl-node-val'],
+      scripts=['scripts/python-virl','scripts/pyvirl-node-val'],
       install_requires=['requests'],
 
       classifiers=[
