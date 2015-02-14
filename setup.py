@@ -3,12 +3,12 @@
 from distutils.core import setup
 
 setup(name='python-virl',
-      version='1.0.0',
+      version='1.0.1',
       url='https://github.com/mthibaut/python-virl',
       description='Control Cisco VIRL through a python script',
       author='Maarten Thibaut',
       author_email='mthibaut@cisco.com',
-      scripts=['scripts/python-virl'],
+      scripts=['scripts/python-virl',['scripts/pyvirl-node-val'],
       install_requires=['requests'],
 
       classifiers=[

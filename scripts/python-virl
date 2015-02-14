@@ -84,6 +84,7 @@ def main(argv):
       except IndexError:
          usage(2)
       astatus = status(user, password, server, simulation_id)
+      pprint.pprint(astatus)
    elif command == 'start':
       simulation_id = start(user, password, server, name, file)
       print(simulation_id)
@@ -105,6 +106,15 @@ def main(argv):
             i += 1
       if i:
          exit(1)
+   elif command == 'topology':
+      try:
+         simulation_id = args.pop(0)
+      except IndexError:
+         usage(2)
+      top = topology(user, password, server, simulation_id)
+      import xml.dom.minidom
+      print(xml.dom.minidom.parseString(top).toprettyxml())
+      #pprint.pprint(top)
    else:
       usage(2)
 
@@ -180,6 +190,7 @@ def status(user, password, server, simulation_id):
 
 def wait_sim_active(user, password, server, simulation_id):
    astatus = status(user, password, server, simulation_id)
+   #pprint.pprint(astatus)
    if astatus['state'] != 'ACTIVE':
       if debug > 1:
          print('State for sim_id %s is not yet active (%s)' % (simulation_id, astatus['state']), file=sys.stderr)

@@ -1,2 +1,3 @@
 setup.py
 scripts/python-virl
+scripts/pyvirl-node-val

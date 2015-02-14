@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+import sys
+from lxml import etree
+
+def usage(code):
+    print('Usage: pyvirl-node-val FILE NODE ENTRY\n', file=sys.stderr)
+    sys.exit(code)
+
+def get_entry(root, entry):
+    for element in root.iter():
+        if element.tag == '{http://www.cisco.com/VIRL}entry' and \
+           element.get('key') == entry:
+               return str.strip(element.text)
+    raise Exception
+
+def main(argv):
+    if len(argv) != 3:
+        usage(1)
+    tree = etree.parse(argv[0])
+    root = tree.getroot()
+    for element in root.iter():
+        if element.tag == '{http://www.cisco.com/VIRL}node' and \
+           element.get('name') == argv[1]:
+                try:
+                    print(get_entry(element, argv[2]))
+                except:
+                    print('Key "%s" not found for node "%s".' % (argv[2], argv[1]), file=sys.stderr)
+                    exit(3)
+                exit(0)
+    print('Node "%s" not found.' % argv[1], file=sys.stderr)
+    exit(2)
+
+
+if __name__ == "__main__":
+   main(sys.argv[1:])
+
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
